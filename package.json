@@ -1,0 +1,9 @@
+{
+  "name": "defillama-now-bot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Telegram /now command -> instant DeFiLlama chain share lookup (Vercel serverless)",
+  "engines": {
+    "node": ">=18"
+  }
+}
