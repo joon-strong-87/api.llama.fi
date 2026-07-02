@@ -1,0 +1,10 @@
+# Vercel 배포에서 제외할 파일들
+# 이 파일들은 GitHub Actions(매일 자동 전송)에서만 쓰이고,
+# Vercel(/now 웹훅)과는 무관합니다. requirements.txt가 루트에 있으면
+# Vercel이 프로젝트를 Python 앱으로 오인해서 Python entrypoint를
+# 찾다가 빌드가 실패하므로 반드시 제외해야 합니다.
+
+send_chain_share.py
+requirements.txt
+data/
+.github/
