@@ -1,0 +1,39 @@
+name: Daily DeFiLlama Chain Share to Telegram
+
+on:
+  schedule:
+    # 매일 KST 09:00 = UTC 00:00
+    - cron: "0 0 * * *"
+  workflow_dispatch: {}  # 수동 실행 버튼용
+
+permissions:
+  contents: write  # history.json 커밋을 위해 필요
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run script
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python send_chain_share.py
+
+      - name: Commit updated history
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/history.json
+          git diff --staged --quiet || git commit -m "chore: update chain share history ($(date -u +%Y-%m-%d))"
+          git push
