@@ -93,7 +93,15 @@ function buildMessage(total, shares, prevShares) {
   return lines.join("\n");
 }
 
-async function sendTelegram(chatId, text) {
+const BUTTON_LABEL = "📊 지금 조회";
+
+const KEYBOARD_MARKUP = {
+  keyboard: [[{ text: BUTTON_LABEL }]],
+  resize_keyboard: true,
+  is_persistent: true,
+};
+
+async function sendTelegram(chatId, text, replyMarkup) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) {
     console.error("TELEGRAM_BOT_TOKEN 환경변수가 비어있습니다.");
@@ -101,15 +109,18 @@ async function sendTelegram(chatId, text) {
   }
 
   const url = `https://api.telegram.org/bot${token}/sendMessage`;
+  const payload = {
+    chat_id: chatId,
+    text,
+    parse_mode: "HTML",
+    disable_web_page_preview: true,
+  };
+  if (replyMarkup) payload.reply_markup = replyMarkup;
+
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text,
-      parse_mode: "HTML",
-      disable_web_page_preview: true,
-    }),
+    body: JSON.stringify(payload),
   });
 
   const body = await res.text();
@@ -146,25 +157,31 @@ export default async function handler(req, res) {
   // 먼저 응답하고 나머지는 비동기로 처리해도 되지만, Vercel 서버리스는
   // 응답 후 곧바로 함수가 종료될 수 있어 순서대로 처리한다.
 
-  if (!chatId || String(chatId) !== String(process.env.TELEGRAM_CHAT_ID)) {
+  const expectedChatId = (process.env.TELEGRAM_CHAT_ID || "").trim();
+  if (!chatId || String(chatId).trim() !== expectedChatId) {
     // 등록되지 않은 사람이 보낸 메시지는 무시. 디버깅용으로 로그만 남긴다.
     console.warn(
-      `chat_id 불일치로 무시: 받은 chat_id=${chatId}, 등록된 TELEGRAM_CHAT_ID=${process.env.TELEGRAM_CHAT_ID}`
+      `chat_id 불일치로 무시: 받은 chat_id="${chatId}", 등록된 TELEGRAM_CHAT_ID="${expectedChatId}"`
     );
     res.status(200).send("ignored");
     return;
   }
 
   try {
-    if (text === "/now" || text === "/now@" + (process.env.BOT_USERNAME || "")) {
+    if (
+      text === "/now" ||
+      text === "/now@" + (process.env.BOT_USERNAME || "") ||
+      text === BUTTON_LABEL
+    ) {
       const { total, shares } = await fetchChainShares();
       const prevShares = await fetchPrevShares();
       const msg = buildMessage(total, shares, prevShares);
-      await sendTelegram(chatId, msg);
+      await sendTelegram(chatId, msg, KEYBOARD_MARKUP);
     } else if (text === "/start") {
       await sendTelegram(
         chatId,
-        "안녕하세요! /now 를 입력하면 지금 이 순간의 DeFi 체인 점유율을 바로 보여드려요."
+        `안녕하세요! 아래 "${BUTTON_LABEL}" 버튼을 누르면 지금 이 순간의 DeFi 체인 점유율을 바로 보여드려요.`,
+        KEYBOARD_MARKUP
       );
     }
   } catch (err) {
