@@ -95,8 +95,13 @@ function buildMessage(total, shares, prevShares) {
 
 async function sendTelegram(chatId, text) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) {
+    console.error("TELEGRAM_BOT_TOKEN 환경변수가 비어있습니다.");
+    throw new Error("TELEGRAM_BOT_TOKEN missing");
+  }
+
   const url = `https://api.telegram.org/bot${token}/sendMessage`;
-  await fetch(url, {
+  const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -106,6 +111,15 @@ async function sendTelegram(chatId, text) {
       disable_web_page_preview: true,
     }),
   });
+
+  const body = await res.text();
+  if (!res.ok) {
+    // Vercel Logs에 그대로 남도록 status + 응답 본문을 같이 찍는다
+    console.error(`sendMessage 실패 status=${res.status} body=${body}`);
+    throw new Error(`sendMessage failed: ${res.status} ${body}`);
+  }
+
+  console.log(`sendMessage 성공: ${body}`);
 }
 
 export default async function handler(req, res) {
@@ -133,25 +147,33 @@ export default async function handler(req, res) {
   // 응답 후 곧바로 함수가 종료될 수 있어 순서대로 처리한다.
 
   if (!chatId || String(chatId) !== String(process.env.TELEGRAM_CHAT_ID)) {
-    // 등록되지 않은 사람이 보낸 메시지는 무시
+    // 등록되지 않은 사람이 보낸 메시지는 무시. 디버깅용으로 로그만 남긴다.
+    console.warn(
+      `chat_id 불일치로 무시: 받은 chat_id=${chatId}, 등록된 TELEGRAM_CHAT_ID=${process.env.TELEGRAM_CHAT_ID}`
+    );
     res.status(200).send("ignored");
     return;
   }
 
-  if (text === "/now" || text === "/now@" + (process.env.BOT_USERNAME || "")) {
-    try {
+  try {
+    if (text === "/now" || text === "/now@" + (process.env.BOT_USERNAME || "")) {
       const { total, shares } = await fetchChainShares();
       const prevShares = await fetchPrevShares();
       const msg = buildMessage(total, shares, prevShares);
       await sendTelegram(chatId, msg);
-    } catch (err) {
-      await sendTelegram(chatId, `⚠️ 조회 중 오류가 발생했어요: ${err.message}`);
+    } else if (text === "/start") {
+      await sendTelegram(
+        chatId,
+        "안녕하세요! /now 를 입력하면 지금 이 순간의 DeFi 체인 점유율을 바로 보여드려요."
+      );
     }
-  } else if (text === "/start") {
-    await sendTelegram(
-      chatId,
-      "안녕하세요! /now 를 입력하면 지금 이 순간의 DeFi 체인 점유율을 바로 보여드려요."
-    );
+  } catch (err) {
+    console.error(`핸들러 처리 중 오류: ${err.message}`);
+    try {
+      await sendTelegram(chatId, `⚠️ 조회 중 오류가 발생했어요: ${err.message}`);
+    } catch {
+      // sendTelegram 자체도 실패하면 Vercel Logs의 console.error 기록에 의존한다.
+    }
   }
 
   res.status(200).send("ok");
